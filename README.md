@@ -212,11 +212,49 @@ writer functions end-to-end against a `tempfile.mkdtemp()` directory.
 
 ```
 cache-vuln-scan/
+├── .github/
+│   └── workflows/
+│       └── tests.yml
 ├── cache_vuln_scan.py
 ├── tests/
 │   └── test_detectors.py
 ├── README.md
 └── .gitignore
+```
+
+### CI
+
+GitHub Actions runs the test suite on every push and PR — see
+`.github/workflows/tests.yml`. The workflow is hardened against the same
+class of attacks this scanner detects:
+
+- **All actions pinned to full 40-char commit SHAs** (not floating tags),
+  with a trailing `# vX.Y.Z` comment so Dependabot / Renovate can still
+  update them. Tag-based pins like `@v4` can be silently rewritten by a
+  compromised maintainer — see the
+  [tj-actions supply-chain incident](https://unit42.paloaltonetworks.com/github-actions-supply-chain-attack/).
+- **Top-level `permissions: contents: read`** — the `GITHUB_TOKEN` starts
+  read-only; individual jobs can grant more if they need it.
+- **`persist-credentials: false`** on `actions/checkout` so the token
+  isn't left sitting in `.git/config` for downstream steps to harvest.
+- **Runner version pinned to `ubuntu-24.04`** (not `ubuntu-latest`) so
+  image-rollover doesn't change behavior under your feet.
+- **No caching, no secrets, no `${{ github.event.* }}` in `run:` blocks** —
+  i.e. the workflow passes its own scanner with zero findings.
+
+The CI uses these pinned actions today:
+
+| Action               | Pinned SHA                                   | Version |
+| -------------------- | -------------------------------------------- | ------- |
+| `actions/checkout`   | `11bd71901bbe5b1630ceea73d27597364c9af683`   | v4.2.2  |
+| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | v5.6.0  |
+| `astral-sh/setup-uv` | `08807647e7069bb48b6ef5acd8ec9567f424441b`   | v8.1.0  |
+
+To re-pin (e.g. after a Dependabot PR), verify the new SHA via the
+release page first:
+
+```bash
+gh api repos/actions/checkout/git/refs/tags/v4.2.2 --jq '.object.sha'
 ```
 
 ## Limitations
@@ -227,3 +265,13 @@ cache-vuln-scan/
   repos — review those separately.
 - Heuristic. A clean report ≠ proof of no vulnerabilities; a noisy
   report ≠ proof of exploitability. Triage in context.
+
+## Credits
+
+Co-developed with [Claude](https://claude.com) (Anthropic) in a Cowork
+session — detector rules, scanner, tests, CI workflow, and docs were
+drafted by Claude and reviewed / iterated on by a human maintainer
+before shipping. The detector ruleset is grounded in published research
+by [Adnan Khan](https://github.com/AdnaneKhan)
+([Cacheract](https://github.com/adnaneKhan/cacheract)) and the
+[GitHub Security Lab](https://securitylab.github.com/research/github-actions-untrusted-input/).
