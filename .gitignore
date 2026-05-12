@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# --- uv ---
+.uv/
+
+# --- Scan output ---
+# The scanner's default --out-dir; never commit findings.
+cache-vuln-report/
+# Catch any custom --out-dir users point inside the repo.
+*-cache-vuln-report/
+findings.json
+*-findings.json
+report.md
+*-report.md
+summary.md
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
