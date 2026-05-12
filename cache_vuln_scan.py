@@ -793,7 +793,7 @@ def render_summary(
         "",
         f"Latest run: **{run_date}**",
         "",
-        "Patterns flagged here can enable cache-poisoning attacks such as "
+        "Patterns flagged here can enable cache-poisoning attacks such as " +
         "[Cacheract](https://github.com/adnaneKhan/cacheract).",
         "",
         "| Owner | Repos | Workflows | Critical | High | Medium | Low | Report |",
