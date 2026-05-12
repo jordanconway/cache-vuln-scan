@@ -107,8 +107,11 @@ def get_token() -> str:
             tok = out.stdout.strip()
             if tok:
                 return tok
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            pass
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            print(
+                f"WARNING: Failed to get token from gh CLI ({exc}); falling back to environment variables.",
+                file=sys.stderr,
+            )
     tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if not tok:
         sys.exit(
