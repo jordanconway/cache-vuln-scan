@@ -224,38 +224,76 @@ cache-vuln-scan/
 
 ### CI
 
-GitHub Actions runs the test suite on every push and PR — see
-`.github/workflows/tests.yml`. The workflow is hardened against the same
-class of attacks this scanner detects:
+Two workflows under `.github/workflows/`:
 
-- **All actions pinned to full 40-char commit SHAs** (not floating tags),
-  with a trailing `# vX.Y.Z` comment so Dependabot / Renovate can still
-  update them. Tag-based pins like `@v4` can be silently rewritten by a
-  compromised maintainer — see the
+- `tests.yml` — runs the test suite on every push / PR across Python
+  3.10–3.13, plus a `uv run` smoke test for the PEP 723 inline metadata.
+- `codeql.yml` — runs CodeQL static analysis weekly and on every push /
+  PR. Two languages are analyzed: `python` (the scanner itself) and
+  `actions` (the workflow files in this repo — a different ruleset that
+  complements the scanner's own detectors).
+
+Both workflows are hardened against the same class of attacks this
+scanner detects, plus the broader supply-chain attack surface:
+
+- **All actions pinned to full 40-char commit SHAs** (not floating
+  tags), with a trailing `# vX.Y.Z` comment so Dependabot / Renovate
+  can still update them. Tag-based pins like `@v4` can be silently
+  rewritten by a compromised maintainer — see the
   [tj-actions supply-chain incident](https://unit42.paloaltonetworks.com/github-actions-supply-chain-attack/).
-- **Top-level `permissions: contents: read`** — the `GITHUB_TOKEN` starts
-  read-only; individual jobs can grant more if they need it.
+- **Top-level `permissions: contents: read`** — the `GITHUB_TOKEN`
+  starts read-only; individual jobs can grant more if they need it.
 - **`persist-credentials: false`** on `actions/checkout` so the token
   isn't left sitting in `.git/config` for downstream steps to harvest.
 - **Runner version pinned to `ubuntu-24.04`** (not `ubuntu-latest`) so
   image-rollover doesn't change behavior under your feet.
-- **No caching, no secrets, no `${{ github.event.* }}` in `run:` blocks** —
-  i.e. the workflow passes its own scanner with zero findings.
+- **[`step-security/harden-runner`](https://github.com/step-security/harden-runner)** as the first step in every job — `disable-sudo: true`,
+  an explicit `allowed-endpoints` allowlist, and `egress-policy: audit`
+  so all network egress and process activity is logged for review in
+  the Security tab. Promote to `egress-policy: block` after reviewing
+  the audit baseline.
+- **Dependabot** (`.github/dependabot.yml`) watches the `github-actions`
+  ecosystem and opens grouped PRs weekly so the pinned SHAs above stay
+  current.
+- **`SECURITY.md`** documents the private vulnerability reporting
+  channel (GitHub Security Advisories).
+- **No caching, no secrets, no `${{ github.event.* }}` in `run:` blocks**
+  in either workflow — i.e. both pass their own scanner with zero
+  findings.
 
-The CI uses these pinned actions today:
+The CI uses these pinned actions today (all running on Node 24, the
+runtime GitHub will require by default from June 2026):
 
-| Action               | Pinned SHA                                   | Version |
-| -------------------- | -------------------------------------------- | ------- |
-| `actions/checkout`   | `11bd71901bbe5b1630ceea73d27597364c9af683`   | v4.2.2  |
-| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | v5.6.0  |
-| `astral-sh/setup-uv` | `08807647e7069bb48b6ef5acd8ec9567f424441b`   | v8.1.0  |
+| Action                       | Pinned SHA                                   | Version | Node |
+| ---------------------------- | -------------------------------------------- | ------- | ---- |
+| `actions/checkout`           | `de0fac2e4500dabe0009e67214ff5f5447ce83dd`   | v6.0.2  | 24   |
+| `actions/setup-python`       | `a309ff8b426b58ec0e2a45f0f869d46889d02405`   | v6.2.0  | 24   |
+| `astral-sh/setup-uv`         | `08807647e7069bb48b6ef5acd8ec9567f424441b`   | v8.1.0  | 24   |
+| `github/codeql-action`       | `c10b8064de6f491fea524254123dbe5e09572f13`   | v4.35.1 | 24   |
+| `step-security/harden-runner`| `f808768d1510423e83855289c910610ca9b43176`   | v2.17.0 | 24   |
 
 To re-pin (e.g. after a Dependabot PR), verify the new SHA via the
 release page first:
 
 ```bash
-gh api repos/actions/checkout/git/refs/tags/v4.2.2 --jq '.object.sha'
+gh api repos/actions/checkout/git/refs/tags/v6.0.2 --jq '.object.sha'
 ```
+
+### Repo-level hardening still to do (settings, not files)
+
+The file-level hardening is in place. A few things require touching
+the repo settings on github.com and can't be expressed as files:
+
+- **Enable [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/configuring-private-vulnerability-reporting-for-a-repository)**
+  so the link in `SECURITY.md` works.
+- **Branch protection on `main`:** require PRs, require status checks
+  (`Tests` and `CodeQL` jobs), require linear history, dismiss stale
+  approvals on new pushes.
+- **Disallow force pushes and direct pushes to `main`.**
+- **Require signed commits.**
+- **Enable GitHub Secret Scanning push protection.**
+- **Once the Harden-Runner audit-mode log shows a stable egress
+  baseline,** switch `egress-policy: audit` → `block` in each workflow.
 
 ## Limitations
 

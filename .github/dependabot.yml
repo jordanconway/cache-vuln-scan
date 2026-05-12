@@ -1,0 +1,43 @@
+# Dependabot keeps the SHAs pinned in .github/workflows/*.yml current.
+# It opens grouped PRs once a week so you get one PR per ecosystem
+# bump rather than one per action.
+#
+# Docs: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+version: 2
+
+updates:
+  # ---------------------------------------------------------------
+  # Pinned GitHub Actions (the SHAs in .github/workflows/*.yml).
+  # ---------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    # Delay newly-published action versions before opening a PR.
+    # Mitigates compromised-action publishes (e.g. tj-actions/changed-files
+    # 2025) by giving the ecosystem time to detect and yank a bad release.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    groups:
+      # Bundle all action bumps into a single PR per week. Easier to
+      # review (and revert) than five separate ones.
+      actions:
+        patterns:
+          - "*"
+
+  # NOTE: no pip / uv ecosystem entry — the scanner declares
+  #   `dependencies = []` in its PEP 723 inline metadata and the
+  #   tests use stdlib only. Add an entry here if that ever changes.

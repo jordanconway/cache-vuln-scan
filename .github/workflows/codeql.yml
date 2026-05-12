@@ -1,0 +1,79 @@
+# CodeQL static analysis for the scanner itself.
+#
+# Analyzes two languages:
+#   * python  — the scanner code
+#   * actions — the workflow files in .github/workflows
+#
+# The `actions` language is GitHub's own CodeQL pack for finding
+# script-injection sinks, unsafe checkouts, and other workflow
+# antipatterns — i.e. the same class of issue cache_vuln_scan.py
+# detects, but with a different (complementary) ruleset.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sweep on `main` — picks up any new query rules shipped
+    # upstream since the last push.
+    - cron: '37 8 * * 1'  # Mondays 08:37 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      # Required to upload SARIF results to the Security tab.
+      security-events: write
+      contents: read
+      # CodeQL occasionally pulls bundle artifacts from ghcr.
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, actions]
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          # Audit mode logs egress and process activity but doesn't
+          # block. Tighten to `block` after a baseline is established.
+          egress-policy: audit
+          disable-sudo: true
+          # CodeQL pulls the bundle and its query packs from GitHub's
+          # CDN. Object storage hostname covers the bundle download.
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            uploads.github.com:443
+
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality is broader than the default suite;
+          # for a small codebase the extra runtime is negligible and
+          # the extra coverage is worth it.
+          queries: security-and-quality
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+        with:
+          category: "/language:${{ matrix.language }}"
